@@ -17,19 +17,15 @@ class ColoredTextView @JvmOverloads constructor(
 ) : TextView(context, attrs, defStyle) {
 
     private var boundsArray = emptyArray<Rect>()
-    private var needsReinitialization = true
     private var pathPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLUE
         style = Paint.Style.FILL
-        pathEffect = CornerPathEffect(30f)
+        pathEffect = CornerPathEffect(context.resources.getDimension(R.dimen.corner_radius))
     }
     private var path = Path()
 
     override fun onDraw(canvas: Canvas?) {
-        if (needsReinitialization) {
-            boundsArray = createRects(layout.lineCount)
-            needsReinitialization = false
-        }
+        boundsArray = createRects(layout.lineCount)
         for (i in 0 until layout.lineCount) {
             val bounds = boundsArray[i]
             layout.getLineBounds(i, bounds)
@@ -44,7 +40,7 @@ class ColoredTextView @JvmOverloads constructor(
         canvas?.translate(paddingLeft.toFloat(), paddingTop.toFloat())
         for (rect in boundsArray) {
             path.reset()
-            createPath(path, boundsArray, 0)
+            createPath(path, boundsArray)
             canvas?.drawPath(path, pathPaint)
         }
         layout.paint.color = Color.WHITE
@@ -59,63 +55,102 @@ class ColoredTextView @JvmOverloads constructor(
         return Array(lineCount) { Rect() }
     }
 
-    private fun createPath(path: Path, arr: Array<Rect>, i: Int): Int {
-        val rect = arr[i]
-        if (i == 0) {
-            path.moveTo(rect.left.toFloat(), rect.top.toFloat())
-            path.lineTo(rect.right.toFloat(), rect.top.toFloat())
-            if (arr.size > i + 1) {
-                val nextRect = arr[i + 1]
-                if (nextRect.right > rect.right) {
-                    path.rLineTo(0f, nextRect.top.toFloat() - rect.top.toFloat())
-                    path.lineTo(nextRect.right.toFloat(), nextRect.top.toFloat())
-                } else {
-                    path.lineTo(rect.right.toFloat(), rect.bottom.toFloat())
-                    path.rLineTo(-(rect.right.toFloat() - nextRect.right.toFloat()), 0f)
-                }
-            } else {
-                path.lineTo(rect.right.toFloat(), rect.bottom.toFloat())
+    private fun createPath(path: Path, arr: Array<Rect>) {
+        val count = arr.size
+        when {
+            count <= 0 -> return
+            count == 1 -> {
+                val rect = arr[0]
+                singleLine(rect, path)
             }
+            else -> multipleLines(arr, path)
         }
-        if (i == arr.size - 1) {
+    }
+
+    private fun singleLine(rect: Rect, path: Path) {
+        val rLeft = rect.left.toFloat()
+        val rTop = rect.top.toFloat()
+        val rRight = rect.right.toFloat()
+        val rBottom = rect.bottom.toFloat()
+        path.moveTo(rLeft, rTop)
+        path.lineTo(rRight, rTop)
+        path.lineTo(rRight, rBottom)
+        path.lineTo(rLeft, rBottom)
+        path.close()
+    }
+
+    private fun multipleLines(arr: Array<Rect>, path: Path) {
+        recursiveHelper(arr, path, 0)
+    }
+
+    private fun recursiveHelper(arr: Array<Rect>, path: Path, i: Int) {
+        val rect = arr[i]
+        val rLeft = rect.left.toFloat()
+        val rTop = rect.top.toFloat()
+        val rRight = rect.right.toFloat()
+        val rBottom = rect.bottom.toFloat()
+
+        if (i == 0) {
+            val nextRect = arr[i + 1]
+            val nextTop = nextRect.top.toFloat()
+            val nextRight = nextRect.right.toFloat()
+
+            path.moveTo(rLeft, rTop)
+            path.lineTo(rRight, rTop)
+            if (nextRight > rRight) {
+                path.rLineTo(0f, nextTop - rTop)
+                path.lineTo(nextRight, nextTop)
+            } else {
+                path.lineTo(rRight, rBottom)
+                path.rLineTo(-(rRight - nextRight), 0f)
+            }
+        } else if (i == arr.size - 1) {
+            val prevRect = arr[i - 1]
+            val prevLeft = prevRect.left.toFloat()
+            val prevBottom = prevRect.bottom.toFloat()
+
             path.lineTo(rect.right.toFloat(), rect.bottom.toFloat())
             path.lineTo(rect.left.toFloat(), rect.bottom.toFloat())
-            if (i - 1 >= 0) {
-                val prevRect = arr[i - 1]
-                if (prevRect.left.toFloat() < rect.left.toFloat()) {
-                    path.rLineTo(0f, -(rect.bottom.toFloat() - prevRect.bottom.toFloat()))
-                    path.lineTo(prevRect.left.toFloat(), prevRect.bottom.toFloat())
-                } else {
-                    path.lineTo(rect.left.toFloat(), rect.top.toFloat())
-                    path.rLineTo(prevRect.left.toFloat() - rect.left.toFloat(), 0f)
-                }
+            if (prevLeft < rLeft) {
+                path.rLineTo(0f, -(rBottom - prevBottom))
+                path.lineTo(prevLeft, prevBottom)
             } else {
-                path.lineTo(rect.left.toFloat(), rect.top.toFloat())
+                path.lineTo(rLeft, rTop)
+                path.rLineTo(prevLeft - rLeft, 0f)
             }
-            return i - 1
-        }
-
-        if (i != 0 && i != arr.size - 1) {
-            val nextRect = arr[i + 1]
-            if (nextRect.right > rect.right) {
-                path.rLineTo(0f, nextRect.top.toFloat() - rect.top.toFloat())
-                path.lineTo(nextRect.right.toFloat(), nextRect.top.toFloat())
-            } else {
-                path.lineTo(rect.right.toFloat(), rect.bottom.toFloat())
-                path.rLineTo(-(rect.right.toFloat() - nextRect.right.toFloat()), 0f)
-            }
-        }
-
-        val previous = createPath(path, arr, i + 1)
-
-        val prevRect = arr[previous]
-        if (prevRect.left.toFloat() < rect.left.toFloat()) {
-            path.rLineTo(0f, -(rect.bottom.toFloat() - prevRect.bottom.toFloat()))
-            path.lineTo(prevRect.left.toFloat(), prevRect.bottom.toFloat())
+            return
         } else {
-            path.lineTo(rect.left.toFloat(), rect.top.toFloat())
-            path.rLineTo(prevRect.left.toFloat() - rect.left.toFloat(), 0f)
+            val nextRect = arr[i + 1]
+            val nextRight = nextRect.right.toFloat()
+            val nextTop = nextRect.top.toFloat()
+
+            if (nextRect.right > rect.right) {
+                path.rLineTo(0f, nextTop - rTop)
+                path.lineTo(nextRight, nextTop)
+            } else {
+                path.lineTo(rRight, rBottom)
+                path.rLineTo(-(rRight - nextRight), 0f)
+            }
         }
-        return previous - 1
+
+        recursiveHelper(arr, path, i + 1)
+
+        if (i == 0) {
+            path.close()
+        } else {
+            val prevRect = arr[i - 1]
+            val prevLeft = prevRect.left.toFloat()
+            val prevBottom = prevRect.bottom.toFloat()
+
+            if (prevLeft < rLeft) {
+                path.rLineTo(0f, -(rBottom - prevBottom))
+                path.lineTo(prevLeft, prevBottom)
+            } else {
+                path.lineTo(rLeft, rTop)
+                path.rLineTo(prevLeft - rLeft, 0f)
+            }
+        }
+
+        return
     }
 }
