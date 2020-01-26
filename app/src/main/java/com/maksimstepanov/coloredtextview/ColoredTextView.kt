@@ -2,6 +2,9 @@ package com.maksimstepanov.coloredtextview
 
 import android.content.Context
 import android.graphics.*
+import android.text.BoringLayout
+import android.text.Layout
+import android.text.StaticLayout
 import android.util.AttributeSet
 import android.widget.TextView
 
@@ -23,17 +26,21 @@ class ColoredTextView @JvmOverloads constructor(
         pathEffect = CornerPathEffect(context.resources.getDimension(R.dimen.corner_radius))
     }
     private var path = Path()
+    private var needsReinitialization = true
 
     override fun onDraw(canvas: Canvas?) {
-        boundsArray = createRects(layout.lineCount)
+        if (needsReinitialization) {
+            boundsArray = createRects(layout.lineCount)
+        }
+
         for (i in 0 until layout.lineCount) {
             val bounds = boundsArray[i]
             layout.getLineBounds(i, bounds)
-            bounds.top = layout.getLineTop(i) - paddingTop
-            bounds.left = layout.getLineLeft(i).toInt() - paddingLeft
+            bounds.top = layout.getLineTop(i) - (paddingTop - 10)
+            bounds.left = layout.getLineLeft(i).toInt() - (paddingLeft - 10)
             bounds.right =
-                layout.getLineLeft(i).toInt() + layout.getLineWidth(i).toInt() + paddingRight
-            bounds.bottom = layout.getLineBottom(i) + paddingBottom
+                layout.getLineLeft(i).toInt() + layout.getLineWidth(i).toInt() + (paddingRight - 10)
+            bounds.bottom = layout.getLineBottom(i) + (paddingBottom - 10)
         }
 
         canvas?.save()
@@ -43,9 +50,9 @@ class ColoredTextView @JvmOverloads constructor(
             createPath(path, boundsArray)
             canvas?.drawPath(path, pathPaint)
         }
-        layout.paint.color = Color.WHITE
-        layout.draw(canvas)
         canvas?.restore()
+
+        super.onDraw(canvas)
     }
 
     private fun createRects(lineCount: Int): Array<Rect> {
